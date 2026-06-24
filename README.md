@@ -3,3 +3,4 @@ W powyższym folderze znajdziesz wszystkie pliki z danymi oraz schemat zastosowa
 Najlepiej otwierać workflow z pliku dane v1.ows (najnowszy).   
 xtwitter-via-zeeschuimer są to nieprzerobione zestaw danych.   
 Po szczegółowy opis wszystkich funkcji i sposobu użycia sprawdź moją pracę licencjacką.   
+Kod Pythona odnosi się do kodu na usunięcie z bazy innych języków niż angielski.
