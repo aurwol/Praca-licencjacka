@@ -1,0 +1,85 @@
+import Orange
+import re
+from Orange.data import Domain, ContinuousVariable
+
+try:
+    from langdetect import detect, DetectorFactory
+    DetectorFactory.seed = 0
+    USE_LANGDETECT = True
+except ImportError:
+    USE_LANGDETECT = False
+
+# Rozbudowana sieć bezpieczeństwa: typowo angielskie słówka, skróty i slang internetowy
+ENG_SAFETY_NET = {
+    'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for', 'on', 'with',
+    'he', 'as', 'you', 'do', 'at', 'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say',
+    'just', 'fyi', 'ai', 'isnt', 'dont', 'cant', 'not', 'are', 'am', 'my', 'your', 'me', 'im',
+    'cool', 'good', 'thanks', 'thank', 'lol', 'lmao', 'wow', 'yeah', 'yes', 'no', 'ok', 'okay',
+    'u', 'r', 'hi', 'hello', 'pls', 'please', 'like', 'get', 'was', 'so', 'up', 'out', 'now'
+}
+
+def clean_for_detection(text):
+    """Czyści tekst tylko na potrzeby rozpoznawania języka"""
+    # 1. Usuń wzmianki (@user) i hashtagi (#tag)
+    text = re.sub(r'[@#]\w+', '', text)
+    # 2. Usuń linki URL
+    text = re.sub(r'http\S+', '', text)
+    # 3. Usuń emotki i znaki specjalne (zostaw tylko litery łacińskie i spacje)
+    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    # 4. Zmień wielokrotne spacje w jedną
+    text = re.sub(r'\s+', ' ', text).strip().lower()
+    return text
+
+out_data = None
+
+if in_data is not None:
+    text_vars = [v for v in in_data.domain.metas if v.is_string] + \
+                [v for v in in_data.domain.attributes if v.is_string]
+    
+    if text_vars:
+        text_attr = text_vars[0]
+        is_eng_var = ContinuousVariable("Is_English")
+        
+        new_domain = Domain(
+            in_data.domain.attributes, 
+            in_data.domain.class_vars, 
+            metas=in_data.domain.metas + (is_eng_var,)
+        )
+        
+        out_data = Orange.data.Table(new_domain, in_data)
+        
+        for row in out_data:
+            original_text = str(row[text_attr]).strip()
+            is_english = 0  # Domyślnie nie-angielski
+            
+            if original_text and original_text != "?":
+                # Oczyszczamy tekst do analizy (usuwamy @, #, emotki)
+                cleaned = clean_for_detection(original_text)
+                words = cleaned.split()
+                
+                # REGUŁA AWARYJNA DLA EMOTEK / SAMYCH NICKÓW:
+                # Jeśli po oczyszczeniu tekstu nic nie zostało (np. komentarz to same emotki albo tylko "@user"),
+                # oznaczamy jako 1 (angielski), żeby NIE tracić danych w ciemno.
+                if not words:
+                    is_english = 1
+                else:
+                    # Liczymy ile słów pasuje do naszej angielskiej sieci bezpieczeństwa
+                    safety_matches = sum(1 for w in words if w in ENG_SAFETY_NET)
+                    
+                    # Jeśli tekst zawiera super-popularne angielskie słowa/slang,
+                    # od razu uznajemy go za angielski (omijamy surowy langdetect)
+                    if safety_matches >= 1 and (len(words) <= 4 or (safety_matches / len(words)) >= 0.15):
+                        is_english = 1
+                    elif USE_LANGDETECT:
+                        try:
+                            # Jeśli sieć bezpieczeństwa nie pomogła, pytamy langdetect
+                            if detect(cleaned) == 'en':
+                                is_english = 1
+                        except Exception:
+                            pass
+            
+            row[is_eng_var] = is_english
+            
+        print("Filtrowanie zakończone. Sprawdź wyniki w Data Table!")
+    else:
+        out_data = in_data
